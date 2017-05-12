@@ -94,21 +94,26 @@ func (pb *PushBullet) SetActiveDevice(key string) {
 }
 
 // Method for communicating with PushBullet
-func (pb *PushBullet) pbRequest(method string, url string, body map[string]interface{}, result interface{}) error {
+func (pb *PushBullet) pbRequest(method string, url string, body map[string]interface{}, result interface{}) (err error) {
 	if pb.client == nil {
 		pb.client = &http.Client{}
 	}
 
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		fmt.Println("Error marshalling body")
-		fmt.Println(err)
+	var r *http.Request
+	if body == nil {
+		r, err = http.NewRequest(method, url, nil)
+	} else {
+		jsonBody, jsonError := json.Marshal(body)
+		if jsonError != nil {
+			fmt.Println("Error marshalling body: " + url)
+			return jsonError
+		}
+		r, err = http.NewRequest(method, url, bytes.NewBuffer(jsonBody))
 	}
 
-	r, err := http.NewRequest(method, url, bytes.NewBuffer(jsonBody))
 	if err != nil {
-		fmt.Println("Error on request create")
-		return err
+		fmt.Println("Error on request create: " + url)
+		return
 	}
 
 	r.Header.Add("Content-Type", "application/json")
@@ -119,19 +124,24 @@ func (pb *PushBullet) pbRequest(method string, url string, body map[string]inter
 
 	resp, err := pb.client.Do(r)
 	if err != nil {
-		fmt.Println("Error on request do")
+		fmt.Println("Error on request do: ")
 		fmt.Println(err)
-		return err
+		return
 	}
 
 	defer resp.Body.Close()
 	responseBody, err := ioutil.ReadAll(resp.Body)
-
 	if err != nil {
-		fmt.Println("Error on request read")
-		return err
+		fmt.Println("Error on response read: " + url)
+		return
 	}
+
 	err = json.Unmarshal(responseBody, result)
+	if err != nil {
+		fmt.Println("Error on response parse: " + url)
+		fmt.Println("json: " + string(responseBody))
+		return
+	}
 
 	return err
 }

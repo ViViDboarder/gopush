@@ -81,7 +81,7 @@ func main() {
 	config.Write()
 
 	if options.Push {
-		pb.Push(options.Message)
+		pb.PushNote(options.Message)
 	} else if options.List {
 		devices := pb.GetDevices()
 		PrintDevices(devices, pb.ActiveDevice)
