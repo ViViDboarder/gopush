@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
 
 	"./goson"
@@ -34,15 +35,31 @@ func loadArgs() {
 	}
 
 	// Positional args
-	if len(flag.Args()) == 0 {
-		options.List = true
-	} else if len(flag.Args()) == 1 {
+	switch flag.NArg() {
+	case 0:
+		data, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			// TODO: Make errors great again!
+			os.Exit(1)
+		}
+		message := string(data)
+		if message == "" {
+			options.List = true
+		} else {
+			fmt.Println(message)
+			options.Message = message
+			options.Push = true
+		}
+		break
+	case 1:
 		options.Message = flag.Args()[0]
 		options.Push = true
-	} else if len(flag.Args()) == 2 {
+		break
+	case 2:
 		options.Device = flag.Args()[0]
 		options.Message = flag.Args()[1]
 		options.Push = true
+		break
 	}
 }
 
