@@ -1,37 +1,39 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 
-	"./goson"
-	"./pushbullet"
+	"github.com/ViViDboarder/gopush/goson"
+	"github.com/ViViDboarder/gopush/pushbullet"
 )
 
 type Options struct {
-	Token     string
-	Message   string
-	Device    string
-	Push      bool
-	List      bool
-	SetActive bool
+	Token   string
+	Message string
+	Device  string
+	Push    bool
+	List    bool
 }
 
-var options = Options{}
-
-func loadArgs() {
+func loadArgs() (options Options, err error) {
+	options = Options{}
 	token := flag.String("token", "", "Your API Token")
 	activeDevice := flag.String("d", "", "Set default device")
+	listDevices := flag.Bool("l", false, "List devices")
 
 	flag.Parse()
 
 	options.Token = *token
 	options.Device = *activeDevice
+	options.List = *listDevices
 
-	if options.Device != "" {
-		options.SetActive = true
+	if options.List {
+		return
 	}
 
 	// Positional args
@@ -39,8 +41,7 @@ func loadArgs() {
 	case 0:
 		data, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
-			// TODO: Make errors great again!
-			os.Exit(1)
+			return options, err
 		}
 		message := string(data)
 		if message == "" {
@@ -61,51 +62,10 @@ func loadArgs() {
 		options.Push = true
 		break
 	}
+	return
 }
 
-func main() {
-	loadArgs()
-
-	config := goson.LoadConfig("gopush")
-
-	var ok bool
-	if options.Token != "" {
-		config.Set("token", options.Token)
-	} else {
-		options.Token, ok = config.GetString("token")
-
-		if !ok {
-			fmt.Println("No token found")
-			os.Exit(1)
-		}
-	}
-
-	pb := pushbullet.New(options.Token)
-
-	if options.Device == "" {
-		activeDeviceIden, ok := config.GetString("activeDeviceIden")
-		if ok {
-			options.Device = activeDeviceIden
-		}
-	}
-
-	pb.SetActiveDevice(options.Device)
-
-	if options.SetActive {
-		config.Set("activeDeviceIden", pb.ActiveDevice.Iden)
-	}
-
-	config.Write()
-
-	if options.Push {
-		pb.PushNote(options.Message)
-	} else if options.List {
-		devices := pb.GetDevices()
-		PrintDevices(devices, pb.ActiveDevice)
-	}
-}
-
-func PrintDevices(devices []pushbullet.Device, activeDevice pushbullet.Device) {
+func printDevices(devices []pushbullet.Device, activeDevice pushbullet.Device) {
 	fmt.Println("Devices:")
 	var prefix string
 	for _, device := range devices {
@@ -116,5 +76,63 @@ func PrintDevices(devices []pushbullet.Device, activeDevice pushbullet.Device) {
 		}
 
 		fmt.Println(prefix + device.Format())
+	}
+}
+
+func getToken(options Options, config goson.Config) (token string, err error) {
+	if options.Token != "" {
+		token = options.Token
+		config.Set("token", options.Token)
+	} else {
+		var ok bool
+		token, ok = config.GetString("token")
+		if !ok {
+			err = errors.New("No token found")
+		}
+	}
+	return
+}
+
+func getDevice(options Options, config goson.Config) (device string) {
+	if options.Device == "" {
+		activeDeviceIden, ok := config.GetString("activeDeviceIden")
+		if ok {
+			device = activeDeviceIden
+		}
+	}
+	return
+}
+
+func persistDevice(activeDeviceIden string, config goson.Config) {
+	storedDeviceIden, ok := config.GetString("activeDeviceIden")
+	if activeDeviceIden != "" && ok && activeDeviceIden != storedDeviceIden {
+		config.Set("activeDeviceIden", activeDeviceIden)
+	}
+}
+
+func main() {
+	options, err := loadArgs()
+	if err != nil {
+		log.Fatal(err)
+	}
+	config := goson.LoadConfig("gopush")
+	token, err := getToken(options, config)
+	if err != nil {
+		fmt.Println("Token required and not provided by config or command line")
+		log.Fatal(err)
+	}
+	device := getDevice(options, config)
+
+	pb := pushbullet.New(token)
+	pb.SetActiveDevice(device)
+
+	persistDevice(pb.ActiveDevice.Iden, config)
+	config.Write()
+
+	if options.Push {
+		pb.PushNote(options.Message)
+	} else if options.List {
+		devices := pb.GetDevices()
+		printDevices(devices, pb.ActiveDevice)
 	}
 }

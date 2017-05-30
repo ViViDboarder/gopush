@@ -9,6 +9,7 @@ General usage:
 gopush -token="yourapitokenfrompushbullet"
 gopush "Whatever you want pushed"
 ```
-Defaults to all devices, but you can also specify with `-d="Device name"`
+
+Defaults to all devices, but you can also specify with `gopush -d="Device name"`. Can't remember your devices? `gopush -l` will list them.
 
 I often use this combined with a bash or fish script (maybe I'll post later) to push me successes, failures, or results for long running commands.
