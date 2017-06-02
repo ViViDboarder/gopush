@@ -12,57 +12,62 @@ import (
 	"github.com/ViViDboarder/gopush/pushbullet"
 )
 
+const (
+	action_list_devs = iota
+	action_send_note = iota
+	action_send_link = iota
+)
+
 type Options struct {
 	Token   string
 	Message string
 	Device  string
-	Push    bool
-	List    bool
+	Action  int
 }
 
-func loadArgs() (options Options, err error) {
-	options = Options{}
-	token := flag.String("token", "", "Your API Token")
-	activeDevice := flag.String("d", "", "Set default device")
+func readOptions() (options Options, err error) {
+	tokenPtr := flag.String("token", "", "Your API Token (will be persisted to your home directory)")
+	devicePtr := flag.String("d", "", "Set default device (defaults to all devices)")
 	listDevices := flag.Bool("l", false, "List devices")
+	pushType := flag.String("t", "note", "Push type (note or link)")
 
 	flag.Parse()
 
-	options.Token = *token
-	options.Device = *activeDevice
-	options.List = *listDevices
+	// Token is needed for any connection to PushBullet
+	options = Options{}
+	options.Token = *tokenPtr
+	options.Device = *devicePtr
 
-	if options.List {
+	if *listDevices {
+		options.Action = action_list_devs
 		return
 	}
 
-	// Positional args
-	switch flag.NArg() {
-	case 0:
+	switch *pushType {
+	case "link":
+		option.Action = action_send_link
+		break
+	default:
+		// TODO: Decide if this should warn and print usage
+	case "note":
+		options.Action = action_send_note
+		break
+	}
+
+	// Read message from stdin or args
+	if flag.NArg() == 0 {
 		data, err := ioutil.ReadAll(os.Stdin)
 		if err != nil {
 			return options, err
 		}
-		message := string(data)
-		if message == "" {
-			options.List = true
-		} else {
-			fmt.Println(message)
-			options.Message = message
-			options.Push = true
-		}
-		break
-	case 1:
-		options.Message = flag.Args()[0]
-		options.Push = true
-		break
-	case 2:
-		options.Device = flag.Args()[0]
-		options.Message = flag.Args()[1]
-		options.Push = true
-		break
+		options.Message = string(data)
+	} else {
+		options.Message = strings.Join(flag.Args(), " ")
 	}
-	return
+
+	if option.Message == "" {
+		options.Action = action_list_devs
+	}
 }
 
 func printDevices(devices []pushbullet.Device, activeDevice pushbullet.Device) {
@@ -111,7 +116,7 @@ func persistDevice(activeDeviceIden string, config goson.Config) {
 }
 
 func main() {
-	options, err := loadArgs()
+	options, err := readOptions()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -129,10 +134,14 @@ func main() {
 	persistDevice(pb.ActiveDevice.Iden, config)
 	config.Write()
 
-	if options.Push {
+	switch option.Action {
+	case action_send_note:
 		pb.PushNote(options.Message)
-	} else if options.List {
+		break
+	default:
+	case action_list_devs:
 		devices := pb.GetDevices()
 		printDevices(devices, pb.ActiveDevice)
+		break
 	}
 }
